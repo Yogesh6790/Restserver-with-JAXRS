@@ -55,9 +55,8 @@ public class TodoResource {
 		int count = TodoDao.instance.getModel().size();
 		return String.valueOf(count);
 	}
-	
-	
-	// Insert new Todo  -- it is not idempotent
+
+	// Insert new Todo -- it is not idempotent
 	@POST
 	@Path("addTodo")
 	@Produces(MediaType.TEXT_HTML)
@@ -65,7 +64,7 @@ public class TodoResource {
 	public void newTodo(@FormParam("summary") String summary,
 			@FormParam("description") String description,
 			@Context HttpServletResponse servletResponse) throws IOException {
-		String id = String.valueOf(TodoDao.instance.getModel().size()+1);
+		String id = String.valueOf(TodoDao.instance.getModel().size() + 1);
 		TodoVo todo = new TodoVo(id, summary);
 		if (description != null) {
 			todo.setDescription(description);
@@ -74,8 +73,7 @@ public class TodoResource {
 		servletResponse.sendRedirect("../create_todo.html");
 	}
 
-
-	// Update Todo / Insert new Todo  -- it is idempotent
+	// Update Todo / Insert new Todo -- it is idempotent
 	@PUT
 	@Path("updateTodo")
 	@Consumes({ MediaType.APPLICATION_XML, MediaType.APPLICATION_JSON })
@@ -95,24 +93,24 @@ public class TodoResource {
 		TodoDao.instance.getModel().put(vo.getId(), vo);
 		return res;
 	}
-	
+
 	// Patch -- Modify only particular attributes -- it is idempotent
 	@PATCH
 	@Path("modifyTodo")
 	@Consumes({ MediaType.APPLICATION_XML, MediaType.APPLICATION_JSON })
 	@Produces(MediaType.APPLICATION_JSON)
-	public Response patchResponse(JAXBElement<TodoVo> todoVo){
+	public Response patchResponse(JAXBElement<TodoVo> todoVo) {
 		TodoVo vo = todoVo.getValue();
 		TodoVo actualVo = TodoDao.instance.getModel().get(vo.getId());
 		Response res;
-		if(actualVo == null){
+		if (actualVo == null) {
 			res = Response.noContent().build();
-		}else{
+		} else {
 			res = Response.ok().build();
-			if(vo.getSummary() != null && !vo.getSummary().equals("")){
+			if (vo.getSummary() != null && !vo.getSummary().equals("")) {
 				actualVo.setSummary(vo.getSummary());
 			}
-			if(vo.getDescription() != null && !vo.getDescription().equals("")){
+			if (vo.getDescription() != null && !vo.getDescription().equals("")) {
 				actualVo.setDescription(vo.getDescription());
 			}
 			TodoDao.instance.getModel().put(vo.getId(), actualVo);
@@ -120,13 +118,24 @@ public class TodoResource {
 		return res;
 	}
 
-	// Remove Todo
+	// Remove Todo with params
 	@DELETE
 	@Path("deleteTodo/{id}")
 	public void deleteTodo(@PathParam("id") String id) {
 		TodoVo c = TodoDao.instance.getModel().remove(id);
 		if (c == null)
 			throw new RuntimeException("Delete: Todo with " + id + " not found");
+	}
+
+	// Remove Todo with form
+	@DELETE
+	@Path("deleteTodo")
+	public void deleteTodo(JAXBElement<TodoVo> todoVo) {
+		TodoVo c = TodoDao.instance.getModel()
+				.remove(todoVo.getValue().getId());
+		if (c == null)
+			throw new RuntimeException("Delete: Todo with "
+					+ todoVo.getValue().getId() + " not found");
 	}
 
 	// Testing Simple JSON and XML return types
