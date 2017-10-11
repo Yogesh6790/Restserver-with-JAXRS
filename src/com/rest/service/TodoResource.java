@@ -1,6 +1,8 @@
 package com.rest.service;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 
 import javax.servlet.http.HttpServletResponse;
@@ -20,11 +22,11 @@ import javax.ws.rs.core.UriInfo;
 import javax.xml.bind.JAXBElement;
 
 @Path("/todo")
-public class TodoResource {
+public class TodoResource<T> {
 
 	@Context
 	UriInfo uriInfo;
-
+	
 	// GET, POST, PUT, PATCH, DELETE --> Http Methods
 
 	// Get All Todos
@@ -32,12 +34,14 @@ public class TodoResource {
 	@Path("getAllTodos")
 	@Produces({ MediaType.APPLICATION_XML, MediaType.APPLICATION_JSON })
 	public List<TodoVo> getTodoList() {
-		return (List<TodoVo>) TodoDao.instance.getModel().values();
+		List<TodoVo> todos = new ArrayList<TodoVo>();
+		todos.addAll(TodoDao.instance.getModel().values());
+		return todos;
 	}
 
 	// Get particular Todo
 	@GET
-	@Path("getTodo/{id}")
+	@Path("getAllTodos/{id}")
 	@Produces({ MediaType.APPLICATION_XML, MediaType.APPLICATION_JSON })
 	public TodoVo getTodoListXML(@PathParam("id") String id) {
 		TodoVo vo = TodoDao.instance.getModel().get(id);
@@ -49,7 +53,7 @@ public class TodoResource {
 
 	// Get count of Todos
 	@GET
-	@Path("count")
+	@Path("getAllTodos/count")
 	@Produces(MediaType.TEXT_PLAIN)
 	public String getCount() {
 		int count = TodoDao.instance.getModel().size();
@@ -59,28 +63,53 @@ public class TodoResource {
 	// Insert new Todo -- it is not idempotent
 	@POST
 	@Path("addTodo")
+	@Consumes({ MediaType.APPLICATION_XML, MediaType.APPLICATION_JSON })
+	@Produces({ MediaType.APPLICATION_XML, MediaType.APPLICATION_JSON })
+	public Status newTodo(TodoVo vo) throws IOException {
+		Status status = new Status();
+		try{
+			vo.setId(String.valueOf(TodoDao.instance.getModel().size() + 1));
+			TodoDao.instance.getModel().put(vo.getId(), vo);
+			status.setSuccess(true);
+		}catch(Exception e){
+			status.setSuccess(false);
+			status.setMessage("Error in creating record");
+		}
+		return status;
+	}
+	
+	
+	@POST
+	@Path("addTodoFromForm")
 	@Produces(MediaType.TEXT_HTML)
 	@Consumes(MediaType.APPLICATION_FORM_URLENCODED)
-	public void newTodo(@FormParam("summary") String summary,
+	public void newTodoForm(@FormParam("summary") String summary,
 			@FormParam("description") String description,
 			@Context HttpServletResponse servletResponse) throws IOException {
 		String id = String.valueOf(TodoDao.instance.getModel().size() + 1);
-		TodoVo todo = new TodoVo(id, summary);
+		TodoVo todo = new TodoVo(id, summary, description);
 		if (description != null) {
 			todo.setDescription(description);
 		}
 		TodoDao.instance.getModel().put(id, todo);
-		servletResponse.sendRedirect("../create_todo.html");
+		servletResponse.sendRedirect("../../create_todo.html");
 	}
 
 	// Update Todo / Insert new Todo -- it is idempotent
 	@PUT
 	@Path("updateTodo")
 	@Consumes({ MediaType.APPLICATION_XML, MediaType.APPLICATION_JSON })
-	@Produces(MediaType.APPLICATION_JSON)
-	public Response addTodo(JAXBElement<TodoVo> todoVo) {
-		TodoVo vo = todoVo.getValue();
-		return putAndGetResponse(vo);
+	@Produces({ MediaType.APPLICATION_XML, MediaType.APPLICATION_JSON })
+	public Status updateTodo(TodoVo vo) {
+		Status status = new Status();
+		try{
+			putAndGetResponse(vo);
+			status.setSuccess(true);
+		}catch(Exception e){
+			status.setSuccess(false);
+			status.setMessage("Error in creating or updating record");
+		}
+		return status;
 	}
 
 	private Response putAndGetResponse(TodoVo vo) {
@@ -89,6 +118,9 @@ public class TodoResource {
 			res = Response.noContent().build();
 		} else {
 			res = Response.created(uriInfo.getAbsolutePath()).build();
+			if(vo.getId() == null){
+				vo.setId(String.valueOf(TodoDao.instance.getModel().size() + 1));
+			}
 		}
 		TodoDao.instance.getModel().put(vo.getId(), vo);
 		return res;
@@ -98,54 +130,62 @@ public class TodoResource {
 	@PATCH
 	@Path("modifyTodo")
 	@Consumes({ MediaType.APPLICATION_XML, MediaType.APPLICATION_JSON })
-	@Produces(MediaType.APPLICATION_JSON)
-	public Response patchResponse(JAXBElement<TodoVo> todoVo) {
-		TodoVo vo = todoVo.getValue();
-		TodoVo actualVo = TodoDao.instance.getModel().get(vo.getId());
-		Response res;
-		if (actualVo == null) {
-			res = Response.noContent().build();
-		} else {
-			res = Response.ok().build();
-			if (vo.getSummary() != null && !vo.getSummary().equals("")) {
-				actualVo.setSummary(vo.getSummary());
+	@Produces({ MediaType.APPLICATION_XML, MediaType.APPLICATION_JSON })
+	public Status patchResponse(TodoVo vo) {
+		Status status = new Status();
+		try{
+			TodoVo actualVo = TodoDao.instance.getModel().get(vo.getId());
+			Response res;
+			if (actualVo == null) {
+				res = Response.noContent().build();
+			} else {
+				res = Response.ok().build();
+				if (vo.getSummary() != null && !vo.getSummary().equals("")) {
+					actualVo.setSummary(vo.getSummary());
+				}
+				if (vo.getDescription() != null && !vo.getDescription().equals("")) {
+					actualVo.setDescription(vo.getDescription());
+				}
+				TodoDao.instance.getModel().put(vo.getId(), actualVo);
 			}
-			if (vo.getDescription() != null && !vo.getDescription().equals("")) {
-				actualVo.setDescription(vo.getDescription());
-			}
-			TodoDao.instance.getModel().put(vo.getId(), actualVo);
+			status.setSuccess(true);
+		}catch(Exception e){
+			status.setSuccess(false);
+			status.setMessage("Error in patching record");
 		}
-		return res;
+		return status;
 	}
 
 	// Remove Todo with params
 	@DELETE
 	@Path("deleteTodo/{id}")
-	public void deleteTodo(@PathParam("id") String id) {
+	@Produces({ MediaType.APPLICATION_XML, MediaType.APPLICATION_JSON })
+	public Status deleteTodo(@PathParam("id") String id) {
+		Status status = new Status();
 		TodoVo c = TodoDao.instance.getModel().remove(id);
-		if (c == null)
-			throw new RuntimeException("Delete: Todo with " + id + " not found");
+		status.setSuccess(true);
+		if (c == null){
+			status.setSuccess(false);
+			status.setMessage("Delete: Todo with " + id + " not found");
+		}
+		return status;	
 	}
 
 	// Remove Todo with form
 	@DELETE
 	@Path("deleteTodo")
-	public void deleteTodo(JAXBElement<TodoVo> todoVo) {
+	@Consumes({ MediaType.APPLICATION_XML, MediaType.APPLICATION_JSON })
+	@Produces({ MediaType.APPLICATION_XML, MediaType.APPLICATION_JSON })
+	public Status deleteTodo(TodoVo vo) {
+		Status status = new Status();
 		TodoVo c = TodoDao.instance.getModel()
-				.remove(todoVo.getValue().getId());
-		if (c == null)
-			throw new RuntimeException("Delete: Todo with "
-					+ todoVo.getValue().getId() + " not found");
-	}
-
-	// Testing Simple JSON and XML return types
-	@GET
-	@Produces({ MediaType.APPLICATION_XML, MediaType.APPLICATION_JSON,
-			MediaType.TEXT_XML })
-	public TodoVo getApplicationXml() {
-		TodoVo todo = new TodoVo("10", "Application XML Todo Summary");
-		todo.setDescription("Application XML Todo Description");
-		return todo;
+				.remove(vo.getId());
+		status.setSuccess(true);
+		if (c == null){
+			status.setSuccess(false);
+			status.setMessage("Delete: Todo with " + vo.getId() + " not found");
+		}
+		return status;
 	}
 
 }
